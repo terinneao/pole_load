@@ -5,14 +5,15 @@ import { getConductors } from './actions';
 
 export default function PoleLoadCalculator() {
   const [conductorsData, setConductorsData] = useState([]);
-  
+
   // Global Inputs
-  const [windPressure, setWindPressure] = useState(500); // Pa (N/m^2)
-  const [windAngle, setWindAngle] = useState(90); // Degrees (0 = North, 90 = East, 180 = South, 270 = West)
-  const [poleTopWidth, setPoleTopWidth] = useState(0.2); // m
-  const [poleBottomWidth, setPoleBottomWidth] = useState(0.4); // m
-  const [poleDragCoefficient, setPoleDragCoefficient] = useState(1.0);
+  const [windPressure, setWindPressure] = useState(40); // kg/m^2
+  const [windAngle, setWindAngle] = useState(0); // Degrees (0 = North, 90 = East, 180 = South, 270 = West)
+  const [poleTopWidth, setPoleTopWidth] = useState(0.18); // m
+  const [poleBottomWidth, setPoleBottomWidth] = useState(0.31); // m
+  const [poleDragCoefficient, setPoleDragCoefficient] = useState(2.0);
   const [poleHeight, setPoleHeight] = useState(10.0); // m
+  const [numberOfPoles, setNumberOfPoles] = useState(1);
 
   // Levels State
   const [levels, setLevels] = useState([
@@ -20,10 +21,10 @@ export default function PoleLoadCalculator() {
       id: 1,
       height: 10,
       sides: {
-        North: { conductorId: '', span: 50, sag: 1, count: 0, lineAngle: 0 },
-        East: { conductorId: '', span: 50, sag: 1, count: 0, lineAngle: 90 },
-        South: { conductorId: '', span: 50, sag: 1, count: 0, lineAngle: 180 },
-        West: { conductorId: '', span: 50, sag: 1, count: 0, lineAngle: 270 },
+        North: { conductorId: '', span: 40, sag: 1, count: 0, lineAngle: 0 },
+        East: { conductorId: '', span: 40, sag: 1, count: 0, lineAngle: 90 },
+        South: { conductorId: '', span: 40, sag: 1, count: 0, lineAngle: 180 },
+        West: { conductorId: '', span: 40, sag: 1, count: 0, lineAngle: 270 },
       }
     }
   ]);
@@ -41,10 +42,10 @@ export default function PoleLoadCalculator() {
       id: Date.now(),
       height: 0,
       sides: {
-        North: { conductorId: '', span: 50, sag: 1, count: 0, lineAngle: 0 },
-        East: { conductorId: '', span: 50, sag: 1, count: 0, lineAngle: 90 },
-        South: { conductorId: '', span: 50, sag: 1, count: 0, lineAngle: 180 },
-        West: { conductorId: '', span: 50, sag: 1, count: 0, lineAngle: 270 },
+        North: { conductorId: '', span: 40, sag: 1, count: 0, lineAngle: 0 },
+        East: { conductorId: '', span: 40, sag: 1, count: 0, lineAngle: 90 },
+        South: { conductorId: '', span: 40, sag: 1, count: 0, lineAngle: 180 },
+        West: { conductorId: '', span: 40, sag: 1, count: 0, lineAngle: 270 },
       }
     }]);
   };
@@ -98,24 +99,24 @@ export default function PoleLoadCalculator() {
           if (conductor) {
             // Use custom line angle if defined, otherwise fallback to default direction angle
             const dirAngle = sideData.lineAngle !== undefined ? sideData.lineAngle : directions[dirName].angle;
-            
+
             // Wind angle of attack relative to conductor direction
             const attackAngle = windAngle - dirAngle;
-            
+
             // Wind force per meter on conductor (W_w) = P * d * sin^2(attack_angle)
             // Or simpler standard: P * d
             // Using simplified: W_w = P * (d/1000) * |sin(attack_angle)|
             const w_w = windPressure * (conductor.diameter_mm / 1000) * Math.abs(Math.sin(rad(attackAngle)));
-            
+
             // Conductor weight per meter (W_c) in Newtons
-            const w_c = conductor.weight_kg_m * 9.81;
-            
+            const w_c = conductor.weight_kg_m;
+
             // Resultant weight per meter (W_r)
             const w_r = Math.sqrt(Math.pow(w_c, 2) + Math.pow(w_w, 2));
-            
+
             // Tension (T)
             const tension = (w_r * Math.pow(sideData.span, 2)) / (8 * sideData.sag);
-            
+
             // Transverse Wind Force to Pole (half of the span wind force)
             const f_tw = (w_w * sideData.span) / 2;
 
@@ -144,18 +145,18 @@ export default function PoleLoadCalculator() {
     // Wind on Pole Calculation
     // Pole profile is a trapezoid. Area = (top + bottom) / 2 * height
     const poleArea = ((poleTopWidth + poleBottomWidth) / 2) * poleHeight;
-    
-    // Wind force = pressure * area * drag coefficient
-    const windForceOnPole = windPressure * poleArea * poleDragCoefficient;
-    
+
+    // Wind force = pressure * area * drag coefficient * number of poles
+    const windForceOnPole = windPressure * poleArea * poleDragCoefficient * numberOfPoles;
+
     // The force acts at the centroid of the trapezoid
     // y_c = (h / 3) * (2*a + b) / (a + b) where a = top width, b = bottom width
     const poleCentroidHeight = (poleHeight / 3) * ((2 * poleTopWidth + poleBottomWidth) / (poleTopWidth + poleBottomWidth));
-    
+
     // Decompose wind force into X and Y based on wind angle
     const poleWindFx = windForceOnPole * Math.sin(rad(windAngle));
     const poleWindFy = windForceOnPole * Math.cos(rad(windAngle));
-    
+
     totalFx += poleWindFx;
     totalFy += poleWindFy;
     totalMx += poleWindFx * poleCentroidHeight;
@@ -166,14 +167,14 @@ export default function PoleLoadCalculator() {
     const totalMoment = Math.sqrt(Math.pow(totalMx, 2) + Math.pow(totalMy, 2));
 
     return {
-      Fx: totalFx.toFixed(2),
-      Fy: totalFy.toFixed(2),
-      Mx: totalMx.toFixed(2),
-      My: totalMy.toFixed(2),
-      TotalForce: totalForce.toFixed(2),
-      TotalMoment: totalMoment.toFixed(2)
+      Fx: (totalFx).toFixed(2),
+      Fy: (totalFy).toFixed(2),
+      Mx: (totalMx).toFixed(2),
+      My: (totalMy).toFixed(2),
+      TotalForce: (totalForce).toFixed(2),
+      TotalMoment: (totalMoment).toFixed(2)
     };
-  }, [levels, windPressure, windAngle, conductorsData, poleTopWidth, poleBottomWidth, poleDragCoefficient, poleHeight]);
+  }, [levels, windPressure, windAngle, conductorsData, poleTopWidth, poleBottomWidth, poleDragCoefficient, poleHeight, numberOfPoles]);
 
   return (
     <div className="app-container">
@@ -186,18 +187,18 @@ export default function PoleLoadCalculator() {
         <h2 className="section-title">Global Environmental Inputs</h2>
         <div className="grid-layout">
           <div className="form-group">
-            <label>Wind Pressure (Pa)</label>
-            <input 
-              type="number" 
-              value={windPressure} 
+            <label>Wind Pressure (kg/m²)</label>
+            <input
+              type="number"
+              value={windPressure}
               onChange={(e) => setWindPressure(Number(e.target.value))}
             />
           </div>
           <div className="form-group">
             <label>Wind Angle (Degrees) [0=N, 90=E, 180=S, 270=W]</label>
-            <input 
-              type="number" 
-              value={windAngle} 
+            <input
+              type="number"
+              value={windAngle}
               onChange={(e) => setWindAngle(Number(e.target.value))}
             />
           </div>
@@ -209,38 +210,47 @@ export default function PoleLoadCalculator() {
         <div className="grid-layout">
           <div className="form-group">
             <label>Pole Height (m)</label>
-            <input 
-              type="number" 
+            <input
+              type="number"
               step="0.1"
-              value={poleHeight} 
+              value={poleHeight}
               onChange={(e) => setPoleHeight(Number(e.target.value))}
             />
           </div>
           <div className="form-group">
             <label>Top Width (m)</label>
-            <input 
-              type="number" 
+            <input
+              type="number"
               step="0.01"
-              value={poleTopWidth} 
+              value={poleTopWidth}
               onChange={(e) => setPoleTopWidth(Number(e.target.value))}
             />
           </div>
           <div className="form-group">
             <label>Bottom Width (m)</label>
-            <input 
-              type="number" 
+            <input
+              type="number"
               step="0.01"
-              value={poleBottomWidth} 
+              value={poleBottomWidth}
               onChange={(e) => setPoleBottomWidth(Number(e.target.value))}
             />
           </div>
           <div className="form-group">
             <label>Drag Coefficient</label>
-            <input 
-              type="number" 
+            <input
+              type="number"
               step="0.1"
-              value={poleDragCoefficient} 
+              value={poleDragCoefficient}
               onChange={(e) => setPoleDragCoefficient(Number(e.target.value))}
+            />
+          </div>
+          <div className="form-group">
+            <label>Number of Poles</label>
+            <input
+              type="number"
+              min="1"
+              value={numberOfPoles}
+              onChange={(e) => setNumberOfPoles(Number(e.target.value))}
             />
           </div>
         </div>
@@ -250,27 +260,27 @@ export default function PoleLoadCalculator() {
         <h2 className="section-title">Total Base Reactions</h2>
         <div className="results-grid">
           <div className="result-item">
-            <div className="result-label">Resultant Force (N)</div>
+            <div className="result-label">Resultant Force (kg)</div>
             <div className="result-value" style={{ color: 'var(--accent-color)' }}>{results.TotalForce}</div>
           </div>
           <div className="result-item">
-            <div className="result-label">Resultant Moment (N.m)</div>
+            <div className="result-label">Resultant Moment (kg.m)</div>
             <div className="result-value" style={{ color: 'var(--accent-color)' }}>{results.TotalMoment}</div>
           </div>
           <div className="result-item">
-            <div className="result-label">Force X [East] (N)</div>
+            <div className="result-label">Force X [East] (kg)</div>
             <div className="result-value">{results.Fx}</div>
           </div>
           <div className="result-item">
-            <div className="result-label">Force Y [North] (N)</div>
+            <div className="result-label">Force Y [North] (kg)</div>
             <div className="result-value">{results.Fy}</div>
           </div>
           <div className="result-item">
-            <div className="result-label">Moment X (N.m)</div>
+            <div className="result-label">Moment X (kg.m)</div>
             <div className="result-value">{results.Mx}</div>
           </div>
           <div className="result-item">
-            <div className="result-label">Moment Y (N.m)</div>
+            <div className="result-label">Moment Y (kg.m)</div>
             <div className="result-value">{results.My}</div>
           </div>
         </div>
@@ -283,11 +293,11 @@ export default function PoleLoadCalculator() {
               ✕
             </button>
             <h2 className="section-title">Level {index + 1}</h2>
-            
+
             <div className="form-group" style={{ maxWidth: '250px', marginBottom: '1.5rem' }}>
               <label>Attachment Height (m)</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
                 value={level.height}
                 onChange={(e) => updateLevel(level.id, 'height', Number(e.target.value))}
               />
@@ -299,7 +309,7 @@ export default function PoleLoadCalculator() {
                   <h3 className="direction-title">{dir} Dead-End</h3>
                   <div className="form-group" style={{ marginBottom: '1rem' }}>
                     <label>Conductor Type</label>
-                    <select 
+                    <select
                       value={level.sides[dir].conductorId}
                       onChange={(e) => updateSide(level.id, dir, 'conductorId', e.target.value)}
                     >
@@ -311,8 +321,8 @@ export default function PoleLoadCalculator() {
                   </div>
                   <div className="form-group" style={{ marginBottom: '1rem' }}>
                     <label>Number of Conductors</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       min="0"
                       value={level.sides[dir].count}
                       onChange={(e) => updateSide(level.id, dir, 'count', Number(e.target.value))}
@@ -320,16 +330,16 @@ export default function PoleLoadCalculator() {
                   </div>
                   <div className="form-group" style={{ marginBottom: '1rem' }}>
                     <label>Line Angle (deg)</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       value={level.sides[dir].lineAngle}
                       onChange={(e) => updateSide(level.id, dir, 'lineAngle', Number(e.target.value))}
                     />
                   </div>
                   <div className="form-group" style={{ marginBottom: '1rem' }}>
                     <label>Span (m)</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       min="1"
                       value={level.sides[dir].span}
                       onChange={(e) => updateSide(level.id, dir, 'span', Number(e.target.value))}
@@ -337,8 +347,8 @@ export default function PoleLoadCalculator() {
                   </div>
                   <div className="form-group">
                     <label>Sag (m)</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       min="0.1" step="0.1"
                       value={level.sides[dir].sag}
                       onChange={(e) => updateSide(level.id, dir, 'sag', Number(e.target.value))}
